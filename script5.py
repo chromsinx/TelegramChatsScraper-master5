@@ -27,7 +27,7 @@ SIMILARITY_THRESHOLD = 90
 
 # Параметры для логов (по умолчанию)
 MARQUEE_LENGTH = 5  # количество строк, отображаемых одновременно
-DELAY = 3  # задержка между обновлениями логов
+DELAY = 5  # задержка между обновлениями логов
 
 # Оптимизация: создаем множество стоп-слов и ключевых слов в нижнем регистре один раз
 STOP_WORDS_SET = {word.lower() for word in STOP_WORDS}
@@ -84,29 +84,37 @@ async def remove_old_messages():
 async def display_logs(event):
     """ Отправка логов в виде бегущей строки. """
     global log_display_active
-    global message  # Укажите, что message глобальная    
+    global message
+    
     log_display_active = True
-    message = None  # Инициализируем переменную здесь
+    message = await event.respond("Логи загружаются...", buttons=[
+        Button.inline("Остановить логи", b"stop_logs")
+    ])
+    
+    logs = []  # Исходные логи
+    index = 0
+    
     try:
         with open(LOG_FILE, 'r') as log_file:
             logs = log_file.readlines()
-
-        message = await event.respond("Логи загружаются...", buttons=[
-            Button.inline("Остановить логи", b"stop_logs")
-        ])
-
+        
         total_lines = len(logs)
-        index = 0
+        
         while log_display_active:
             if index + MARQUEE_LENGTH > total_lines:
-                index = 0  # Прокручиваем логи с начала
-            current_logs = logs[index:index + MARQUEE_LENGTH]  # Исправлено: название переменной
-            try:
-                await message.edit("".join(current_logs))
-            except FloodWaitError as e:
-                log_with_time(f'Превышение лимита: нужно подождать {e.seconds} секунд.')
-                await asyncio.sleep(e.seconds)  # Ждем перед попыткой снова
-                continue  # Продолжаем с того же индекса
+                index = 0  # Прокручиваем с начала
+            
+            current_logs = "".join(logs[index:index + MARQUEE_LENGTH])
+            
+            # Проверяем на изменения перед редактированием
+            if message.text != current_logs:
+                try:
+                    await message.edit(current_logs)
+                except FloodWaitError as e:
+                    log_with_time(f'Превышение лимита: нужно подождать {e.seconds} секунд.')
+                    await asyncio.sleep(e.seconds)
+                    continue
+            
             index += MARQUEE_LENGTH
             await asyncio.sleep(DELAY)
     except Exception as e:
@@ -230,3 +238,4 @@ async def main():
 
 if __name__ == '__main__':
     asyncio.run(main())
+  
